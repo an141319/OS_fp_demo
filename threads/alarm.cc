@@ -1,0 +1,145 @@
+// alarm.cc
+//	Routines to use a hardware timer device to provide a
+//	software alarm clock.  For now, we just provide time-slicing.
+//
+//	Not completely implemented.
+//
+// Copyright (c) 1992-1996 The Regents of the University of California.
+// All rights reserved.  See copyright.h for copyright notice and limitation 
+// of liability and disclaimer of warranty provisions.
+
+#include "copyright.h"
+#include "alarm.h"
+#include "main.h"
+
+//----------------------------------------------------------------------
+// Alarm::Alarm
+//      Initialize a software alarm clock.  Start up a timer device
+//
+//      "doRandom" -- if true, arrange for the hardware interrupts to 
+//		occur at random, instead of fixed, intervals.
+//----------------------------------------------------------------------
+
+Alarm::Alarm(bool doRandom)
+{
+    timer = new Timer(doRandom, this);
+}
+
+//----------------------------------------------------------------------
+// Alarm::CallBack
+//	Software interrupt handler for the timer device. The timer device is
+//	set up to interrupt the CPU periodically (once every TimerTicks).
+//	This routine is called each time there is a timer interrupt,
+//	with interrupts disabled.
+//
+//	Note that instead of calling Yield() directly (which would
+//	suspend the interrupt handler, not the interrupted thread
+//	which is what we wanted to context switch), we set a flag
+//	so that once the interrupt handler is done, it will appear as 
+//	if the interrupted thread called Yield at the point it is 
+//	was interrupted.
+//
+//	For now, just provide time-slicing.  Only need to time slice 
+//      if we're currently running something (in other words, not idle).
+//	Also, to keep from looping forever, we check if there's
+//	nothing on the ready list, and there are no other pending
+//	interrupts.  In this case, we can safely halt.
+//----------------------------------------------------------------------
+
+void 
+Alarm::CallBack() 
+{
+    Interrupt *interrupt = kernel->interrupt;
+    MachineStatus status = interrupt->getStatus();
+    
+	//Statistics* stats = kernel->stats;
+	//DEBUG(dbgMLFQ, "----------Alarm_Callback_Start----------");
+	//DEBUG(dbgMLFQ, "[System tick]: TICK[" << stats->totalTicks << "]");
+  	
+    //<TODO>
+
+
+    // In each 100 ticks,     
+    // 1. Update Priority
+    // 2. Update RunTime & RRTime
+    // 3. Check Round Robin
+    
+    // Update Priority
+    kernel->scheduler->UpdatePriority();
+
+    // Get the current running thread
+    Thread *currentThread = kernel->currentThread;
+    if (status == IdleMode) {    // is it time to quit?
+        if (!interrupt->AnyFutureInterrupts()) {
+             timer->Disable(); // turn off the timer
+         }
+     } else {         // there's someone to preempt
+    //DEBUG(dbgMLFQ, "Current thread -> Thread " << currentThread->getID());
+    // Update RunTime & RRTime
+    currentThread->setRunTime(currentThread->getRunTime() + TimerTicks);
+    currentThread->setRRTime(currentThread->getRRTime() + TimerTicks);
+
+    // Update remaining burst time
+/*
+    int oldRemainingBurstTime = currentThread->getRemainingBurstTime();
+    int newRemainingBurstTime = oldRemainingBurstTime - TimerTicks;
+    if (newRemainingBurstTime < 0) {
+        newRemainingBurstTime = 0;
+    }
+    currentThread->setRemainingBurstTime(newRemainingBurstTime);
+*/
+    // Logging the update
+    //DEBUG(dbgMLFQ, "[UpdateRunTime] Tick[" << kernel->stats->totalTicks << "]: Thread [" <<
+    //      currentThread->getID() << "] update remaining burst time, from: [" <<
+    //      oldRemainingBurstTime << "] - [" << TimerTicks << "], to [" <<
+    //      newRemainingBurstTime << "]");
+
+    // Check if the thread has used up its time slice or should yield
+/*
+    if (newRemainingBurstTime == 0) {
+        //DEBUG(dbgMLFQ, "[ContextSwitch] Tick[" << kernel->stats->totalTicks << "]: Thread [" <<
+        //      currentThread->getID() << "] has used up its time slice.");
+
+        // Set status to blocked or ready based on the thread state
+        if (currentThread->getStatus() == BLOCKED) {
+            kernel->scheduler->ReadyToRun(currentThread);
+        } else {
+            currentThread->setStatus(BLOCKED);
+            kernel->scheduler->ReadyToRun(currentThread);
+        }
+        interrupt->YieldOnReturn();
+    }
+*/
+
+    /*Scheduler *scheduler = kernel->scheduler; 
+    if(scheduler->PreemptiveCompare()){  
+            interrupt->YieldOnReturn(); 
+    }*/
+
+        if (currentThread->getPriority() < 50) {
+	    if (currentThread->getRRTime() >= 200) {
+	        currentThread->setRRTime(0); // Reset RRTime
+	        //DEBUG(dbgMLFQ, "[RoundRobin] Tick[" << kernel->stats->totalTicks << "]: Thread [" <<
+	        //      currentThread->getID() << "] is yielding CPU for round-robin scheduling.");
+	        interrupt->YieldOnReturn();
+	    }
+        }
+    }
+/*
+    // Check if it's time to quit based on system state
+    if (status == IdleMode && !interrupt->AnyFutureInterrupts()) {
+        timer->Disable(); // turn off the timer
+    }
+*/
+		//DEBUG(dbgMLFQ, "----------Alarm_Callback_End----------");
+
+    //<TODO>
+    
+         /*if (status == IdleMode) {    // is it time to quit?
+         	if (!interrupt->AnyFutureInterrupts()) {
+            	    timer->Disable(); // turn off the timer
+     		}
+     	} else {         // there's someone to preempt
+            interrupt->YieldOnReturn();
+     	}*/
+}
